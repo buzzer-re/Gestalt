@@ -312,38 +312,40 @@ int vmx::VMLaunch(UINT64 Rip, UINT64 Rsp, int ( *Handler )( GCPUContext* context
 //
 // VMExit wrapper, it can handle VM exit events that are not inteeded to be handled by the VMExitBitmap
 //
+
 int vmx::VMExitHandler( GCPUContext* gcpuContext )
 {
 	int status = 0;
 	VMX_VMEXIT_REASON ExitReason;
-	GuestContext Guest;
 	UINT64 Rip;
 
-	Guest.cpu = gcpuContext;
+	__vmx_vmread( VMCS_GUEST_RIP, &gcpuContext->ExtRegs.rip );
+	__vmx_vmread( VMCS_GUEST_RSP, &gcpuContext->ExtRegs.rsp );
+	__vmx_vmread( VMCS_GUEST_RFLAGS, &gcpuContext->ExtRegs.rflags.AsUInt );
 
-	__vmx_vmread( VMCS_GUEST_RIP, &Guest.ExtRegs.rip );
-	__vmx_vmread( VMCS_GUEST_RSP, &Guest.ExtRegs.rsp );
 	__vmx_vmread( VMCS_EXIT_REASON, ( size_t* ) &ExitReason.AsUInt );
-
+/*
 	if ( VMExit.ExitReasonBitMap[ExitReason.BasicExitReason] )
 	{
 		return vmx::VMExit.Handler( gcpuContext, VMExit.Args, ExitReason );
 	}
+	*/
 
-	Rip = Guest.ExtRegs.rip;
+	Rip = gcpuContext->ExtRegs.rip;
 	//
 	// Default handler
 	//
 	switch ( ExitReason.BasicExitReason )
 	{
 	case vmexit_cpuid:
-		vmx::vm::HandleCPUID( &Guest );
+		vmx::vm::HandleCPUID( gcpuContext );
 		status = 1; // HandleCPUID returns the leaf, we don't really care about it here
+		break;
 	case vmexit_rdmsr:
-		status = vmx::vm::HandleMSRAccess( &Guest, vmx::vm::MSR_ACCESS::MSR_READ );
+		status = vmx::vm::HandleMSRAccess( gcpuContext, vmx::vm::MSR_ACCESS::MSR_READ );
 		break;
 	case vmexit_wrmsr:
-		status = vmx::vm::HandleMSRAccess( &Guest, vmx::vm::MSR_ACCESS::MSR_WRITE );
+		status = vmx::vm::HandleMSRAccess( gcpuContext, vmx::vm::MSR_ACCESS::MSR_WRITE );
 		break;
 	default:
 		status = 0;

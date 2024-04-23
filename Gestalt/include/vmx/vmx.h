@@ -53,14 +53,12 @@ struct VMM
 // VMExit guest state structures
 //
 
-#include <pshpack1.h>
-
 struct GCPUExtendedRegs
 {
 	UINT64 rsp;
 	UINT64 rip;
+	RFLAGS rflags;
 };
-#include <poppack.h>
 
 #include <pshpack1.h>
 struct GCPUContext
@@ -82,6 +80,7 @@ struct GCPUContext
 	UINT64 rdx;
 	UINT64 rcx;
 	UINT64 rax;
+	GCPUExtendedRegs ExtRegs;
 };
 #include <poppack.h>
 
@@ -106,15 +105,15 @@ namespace vmx
 
 		struct CPUID
 		{
-			UINT64 rax;
-			UINT64 rbx;
-			UINT64 rcx;
-			UINT64 rdx;
+			UINT32 eax;
+			UINT32 ebx;
+			UINT32 ecx;
+			UINT32 edx;
 		};
 
-		int HandleCPUID( GuestContext* context );
-		int HandleMSRAccess( GuestContext* context, MSR_ACCESS AccessType );
-		void NextInstruction( GuestContext* context );
+		int HandleCPUID( GCPUContext* context );
+		int HandleMSRAccess( GCPUContext* context, MSR_ACCESS AccessType );
+		void NextInstruction( GCPUContext* context );
 		
 	}
 
