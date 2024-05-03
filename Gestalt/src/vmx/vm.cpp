@@ -4,37 +4,49 @@
 //
 // Handle the CPUID instruction by executing it on the processor normally, returns the leaf for further modifications
 //
-int vmx::vm::HandleCPUID( GCPUContext* context )
+int vmx::vm::HandleCPUID( GCPUContext* context, bool hide )
 {
 	//vmx::vm::CPUID regs = { 0 };
+	CPUID_EAX_01 VersionInformation;
 	int regs[4] = { 0 };
-
 	int leaf = ( UINT32 ) context->rax;
 	int subLeaf = ( UINT32 ) context->rcx;
 
 	__cpuidex( regs, leaf, subLeaf );
-	//__cpuid( ( int* ) &regs, ( UINT32 ) context->rax );
 
-	switch ( leaf )
+
+	if ( hide )
 	{
-
-	case ( ( UINT32 ) 0x40000000 ):
-		//
-		// Return a maximum supported hypervisor CPUID leaf range and a vendor
-		// ID signature as required by the spec.
-		//
-		__debugbreak();
-		regs[0] = ( ( UINT32 ) 0x40000001 );
-		regs[1] = 'tseG';  // "MiniVisor   "
-		regs[2] = 'vtla';
-		regs[3] = 'rosi';
-		break;
+		switch ( leaf )
+		{
+		case CPUID_VERSION_INFORMATION:
+			//
+			// Clear the Virtual machine extensions flag in the ECX register, not only helps to hide but we can't support other hypervisors
+			// because we don't support nested
+			//
+			VersionInformation.CpuidFeatureInformationEcx.AsUInt = regs[ecx];
+			VersionInformation.CpuidFeatureInformationEcx.VirtualMachineExtensions = 0;
+			VersionInformation.CpuidFeatureInformationEcx.Reserved2 = 0;
+			regs[ecx] = VersionInformation.CpuidFeatureInformationEcx.AsUInt;
+			break;
+		case CPUID_HV_VENDOR_INFORMATION:
+			//
+			// Return a maximum supported hypervisor CPUID leaf range and a vendor
+			// ID signature as required by the spec.
+			//
+			regs[eax] = ( ( UINT32 ) 0x40000001 );
+			regs[ebx] = 'tseG';  // "MiniVisor   "
+			regs[ecx] = 'vtla';
+			regs[edx] = 'rosi';
+			break;
+		}
 	}
 
-	context->rax = (UINT64) regs[0];
-	context->rbx = (UINT64) regs[1];
-	context->rcx = (UINT64) regs[2];
-	context->rdx = (UINT64) regs[3];
+
+	context->rax = (UINT64) regs[eax];
+	context->rbx = (UINT64) regs[ebx];
+	context->rcx = (UINT64) regs[ecx];
+	context->rdx = (UINT64) regs[edx];
 
 	vmx::vm::NextInstruction(context);
 

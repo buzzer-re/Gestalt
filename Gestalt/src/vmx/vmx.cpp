@@ -157,6 +157,12 @@ bool vmx::ConfigureVMCSFields( GlobalState* state )
 	IA32_VMX_PINBASED_CTLS_REGISTER PinBasedControls;
 	IA32_VMX_PROCBASED_CTLS_REGISTER PrimaryProcBasedControls;
 	IA32_VMX_PROCBASED_CTLS2_REGISTER SecondaryProcBasedControls;
+	UINT64 cr4 = __readcr4();
+	UINT64 cr0 = __readcr0();
+	UINT64 cr3 = __readcr3();
+
+	UINT64 cr4Mask = VMXUtils::AdjustCR4( cr4 );
+	UINT64 cr0Mask = VMXUtils::AdjustCR0( cr0 );
 
 	_sgdt( &state->GuestState.GDTR);
 	__sidt( &state->GuestState.IDTR );
@@ -168,9 +174,9 @@ bool vmx::ConfigureVMCSFields( GlobalState* state )
 	//
 	// Guest CR values
 	//
-	__vmx_vmwrite( VMCS_GUEST_CR0, __readcr0() );
-	__vmx_vmwrite( VMCS_GUEST_CR3, __readcr3() );
-	__vmx_vmwrite( VMCS_GUEST_CR4, __readcr4() );
+	__vmx_vmwrite( VMCS_GUEST_CR0, cr0 );
+	__vmx_vmwrite( VMCS_GUEST_CR3, cr3 );
+	__vmx_vmwrite( VMCS_GUEST_CR4, cr4 );
 	//
 	// RFLAGS & MSR
 	//
@@ -221,6 +227,7 @@ bool vmx::ConfigureVMCSFields( GlobalState* state )
 	PrimaryProcBasedControls.AsUInt = 0;
 	PrimaryProcBasedControls.ActivateSecondaryControls = 1;
 	PrimaryProcBasedControls.UseMsrBitmaps = 1;
+	
 	PrimaryProcBasedControls.AsUInt = VMXUtils::AdjustControlValue( VmxProcessorBasedControls, PrimaryProcBasedControls.AsUInt );
 
 	SecondaryProcBasedControls.AsUInt = 0;
@@ -243,17 +250,23 @@ bool vmx::ConfigureVMCSFields( GlobalState* state )
 	//
 	// Shadow CR0/4
 	//
-	__vmx_vmwrite( VMCS_CTRL_CR0_READ_SHADOW, __readcr0() );
-	__vmx_vmwrite( VMCS_CTRL_CR4_READ_SHADOW, __readcr4() & ~CR4_VMX_ENABLE_BIT );
+	__vmx_vmwrite( VMCS_CTRL_CR0_READ_SHADOW,cr0 );
+	__vmx_vmwrite( VMCS_CTRL_CR4_READ_SHADOW, cr4 );
+	//
+	// Host CR mask
+	//
+	__vmx_vmwrite( VMCS_CTRL_CR0_GUEST_HOST_MASK, cr0Mask );
+	__vmx_vmwrite( VMCS_CTRL_CR4_GUEST_HOST_MASK, cr4Mask );
+
 	//
 	// Configure host state area
 	//
 	//
 	// Host CR
 	//
-	__vmx_vmwrite( VMCS_HOST_CR0, __readcr0() );
-	__vmx_vmwrite( VMCS_HOST_CR3, __readcr3() );
-	__vmx_vmwrite( VMCS_HOST_CR4, __readcr4() );
+	__vmx_vmwrite( VMCS_HOST_CR0, cr0 );
+	__vmx_vmwrite( VMCS_HOST_CR3, cr3 );
+	__vmx_vmwrite( VMCS_HOST_CR4, cr4 );
 	//
 	// Host segment selectors
 	//
@@ -324,12 +337,11 @@ int vmx::VMExitHandler( GCPUContext* gcpuContext )
 	__vmx_vmread( VMCS_GUEST_RFLAGS, &gcpuContext->ExtRegs.rflags.AsUInt );
 
 	__vmx_vmread( VMCS_EXIT_REASON, ( size_t* ) &ExitReason.AsUInt );
-/*
+
 	if ( VMExit.ExitReasonBitMap[ExitReason.BasicExitReason] )
 	{
 		return vmx::VMExit.Handler( gcpuContext, VMExit.Args, ExitReason );
 	}
-	*/
 
 	Rip = gcpuContext->ExtRegs.rip;
 	//
@@ -338,7 +350,7 @@ int vmx::VMExitHandler( GCPUContext* gcpuContext )
 	switch ( ExitReason.BasicExitReason )
 	{
 	case vmexit_cpuid:
-		vmx::vm::HandleCPUID( gcpuContext );
+		vmx::vm::HandleCPUID( gcpuContext, false );
 		status = 1; // HandleCPUID returns the leaf, we don't really care about it here
 		break;
 	case vmexit_rdmsr:

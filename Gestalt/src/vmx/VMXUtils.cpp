@@ -20,7 +20,7 @@ UINT64 VMXUtils::AdjustCR0( UINT64 cr0Value )
 // Fix the CR1 fields based on the IA32_VMX_CR4_FIXEDX MSR, which holds what can/can't be enabled/disabled
 //
 UINT64 VMXUtils::AdjustCR4( UINT64 cr4Value )
-{
+{   
 	UINT64 Fixed0CR4 = __readmsr( IA32_VMX_CR4_FIXED0 );
 	UINT64 Fixed1CR4 = __readmsr( IA32_VMX_CR4_FIXED1 );
 

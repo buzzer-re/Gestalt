@@ -5,8 +5,9 @@
 
 #define MAX_VMEXIT_REASON_FILTER 64
 #define MSR_MASK_LOW ((UINT64) (UINT32) -1)
-
+#define CPUID_HV_VENDOR_INFORMATION ( UINT32 ) 0x40000000
 #define MASK_SELECTOR(VALUE) VALUE & ~0x7
+
 
 struct State
 {
@@ -103,15 +104,15 @@ namespace vmx
 			MSR_WRITE
 		};
 
-		struct CPUID
+		enum CPUID_REGISTERS
 		{
-			UINT32 eax;
-			UINT32 ebx;
-			UINT32 ecx;
-			UINT32 edx;
+			eax = 0,
+			ebx,
+			ecx,
+			edx,
 		};
 
-		int HandleCPUID( GCPUContext* context );
+		int HandleCPUID( GCPUContext* context, bool hide );
 		int HandleMSRAccess( GCPUContext* context, MSR_ACCESS AccessType );
 		void NextInstruction( GCPUContext* context );
 		

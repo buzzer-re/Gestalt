@@ -41,6 +41,12 @@ bool Hypervisor::Enable()
 	return ( vmx::IsSupported() && vmx::Enable() ) /* || ( svm::IsSupported() && svm::Enable() )*/;
 }
 
+bool Hypervisor::Stop()
+{
+	__vmx_off();
+	return false;
+}
+
 
 //
 // Virtualize all the processors using Intel-VTx
@@ -55,7 +61,7 @@ bool Hypervisor::VMXVirtualize()
 
 	PHYSICAL_ADDRESS High = { 0 };
 	High.QuadPart = MAXUINT64;
-	bool Virtualized = false;
+	Virtualized = false;
 	int status;
 	this->NumberOfCpus = KeQueryActiveProcessors();
 	this->VirtualMachineMonitor.vcpu = ( vCPU* ) MmAllocateContiguousMemory( sizeof( vCPU ) * NumberOfCpus, High );
@@ -115,6 +121,12 @@ bool Hypervisor::VMXVirtualize()
 	}
 
 	//
+	// Enable VMExits that we want to handle
+	//
+	VmExitBitMap[vmexit_cpuid] = true;
+	VmExitBitMap[vmexit_control_register_access] = true; // Handle CR access to detect SMEP disable
+	VmExitBitMap[vmexit_access_to_gdtr_or_idtr] = true; // Detect access to the IDTR (Research that, maybe some syscall hooking approach here ?)
+	//
 	// Time to fly - Guest switch
 	//
 
@@ -168,25 +180,27 @@ bool Hypervisor::VMXVirtualize()
 int Hypervisor::VMXExitHandler( GCPUContext* context, void* HypervisorPtr, VMX_VMEXIT_REASON ExitReason )
 {
 	UNREFERENCED_PARAMETER( HypervisorPtr );
-	UNREFERENCED_PARAMETER( ExitReason );
-	UNREFERENCED_PARAMETER( context );
+	
+	int status = 0;
+	
+	switch ( ExitReason.BasicExitReason )
+	{
+	case vmexit_cpuid:
+		vmx::vm::HandleCPUID( context, true ); // Hide our hypervisor
+		status = 1;
+		break;
+	default:
+		status = 0;
+		break;
+	}
 
-	__debugbreak();
-//	Hypervisor* hv = reinterpret_cast< Hypervisor* >( HypervisorPtr );
-/*
-	VMX_VMEXIT_REASON ExitReason;
-	size_t ExitQualification;
-	UINT64 Rip;
-	UINT64 Rsp;
+	if ( !status )
+	{
+		DbgInfo( "VMMM: VMExit unhandled: %d\nRIP: 0x%x\n", ExitReason.BasicExitReason, context->ExtRegs.rip );
+		KD_DEBUG_BREAK();
+	}
 
-	__vmx_vmread( VMCS_EXIT_REASON, ( size_t* ) &ExitReason.AsUInt );
-	__vmx_vmread( VMCS_GUEST_RIP, &Rip );
-	__vmx_vmread( VMCS_EXIT_QUALIFICATION, &ExitQualification );
-	__vmx_vmread( VMCS_GUEST_RSP, &Rsp );
 
-	DbgInfo( "Exit reason: %x\nQualification: %d\nRIP: %p\nRSP: %p\n", ExitReason.BasicExitReason, ExitQualification, Rip, Rsp );
-	*/
-
-	return 1;
+	return status;
 }
 
